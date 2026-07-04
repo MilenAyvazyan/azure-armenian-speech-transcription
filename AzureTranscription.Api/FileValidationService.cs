@@ -11,14 +11,10 @@ namespace AzureTranscription.Api.Services
 
     public class FileValidationService : IFileValidationService
     {
-        // Allowed formats specified in your tasks
-        private static readonly string[] AllowedExtensions = { ".mp3", ".wav" };
+        private static readonly string[] AllowedExtensions = {".wav" };
 
-        // Strict duration constraints from your task description: Max 40 seconds.
-        // Approximate max sizes to prevent massive file security risks:
-        // .mp3 (~128kbps) for 40s is < 1MB. .wav (uncompressed) for 40s is < 8MB.
-        // Let's set a conservative safety cap at 10 Megabytes.
-        private const long MaxFileSizeBytes = 10 * 1024 * 1024;
+
+        private const long MaxFileSizeBytes = 50 * 1024 * 1024;
 
         public (bool IsValid, string ErrorMessage) ValidateAudioFile(IFormFile file)
         {
@@ -31,14 +27,14 @@ namespace AzureTranscription.Api.Services
             // 2. Size Validation
             if (file.Length > MaxFileSizeBytes)
             {
-                return (false, "File size exceeds the maximum limit allowed (10 MB).");
+                return (false, "File size exceeds the maximum limit allowed (50 MB).");
             }
 
             // 3. Extension / Format Validation
             var fileExtension = Path.GetExtension(file.FileName).ToLowerInvariant();
             if (!AllowedExtensions.Contains(fileExtension))
             {
-                return (false, $"Unsupported file type '{fileExtension}'. Only .mp3 and .wav formats are allowed.");
+                return (false, $"Unsupported file type '{fileExtension}'. Only .wav format is allowed.");
             }
 
             return (true, string.Empty);
