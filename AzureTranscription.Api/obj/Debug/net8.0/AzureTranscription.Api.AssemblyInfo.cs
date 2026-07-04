@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("AzureTranscription.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f9bf1a61f7135df271662d836cebbdd3cc2eba93")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+978cb93e5612708cb3d5b7f16cfaacea93f77b5d")]
 [assembly: System.Reflection.AssemblyProductAttribute("AzureTranscription.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("AzureTranscription.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

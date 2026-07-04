@@ -447,19 +447,19 @@
     ]
   },
   "packageFolders": {
-    "C:\\Users\\HP\\.nuget\\packages\\": {}
+    "C:\\Users\\marti\\.nuget\\packages\\": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\HP\\OneDrive\\Documents\\azure-armenian-speech-transcription\\AzureTranscription.Api\\AzureTranscription.Api.csproj",
+      "projectUniqueName": "C:\\Users\\marti\\PyCharmMiscProject\\azure-armenian-speech-transcription\\AzureTranscription.Api\\AzureTranscription.Api.csproj",
       "projectName": "AzureTranscription.Api",
-      "projectPath": "C:\\Users\\HP\\OneDrive\\Documents\\azure-armenian-speech-transcription\\AzureTranscription.Api\\AzureTranscription.Api.csproj",
-      "packagesPath": "C:\\Users\\HP\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\HP\\OneDrive\\Documents\\azure-armenian-speech-transcription\\AzureTranscription.Api\\obj\\",
+      "projectPath": "C:\\Users\\marti\\PyCharmMiscProject\\azure-armenian-speech-transcription\\AzureTranscription.Api\\AzureTranscription.Api.csproj",
+      "packagesPath": "C:\\Users\\marti\\.nuget\\packages\\",
+      "outputPath": "C:\\Users\\marti\\PyCharmMiscProject\\azure-armenian-speech-transcription\\AzureTranscription.Api\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
-        "C:\\Users\\HP\\AppData\\Roaming\\NuGet\\NuGet.Config"
+        "C:\\Users\\marti\\AppData\\Roaming\\NuGet\\NuGet.Config"
       ],
       "originalTargetFrameworks": [
         "net8.0"
@@ -477,6 +477,11 @@
         "warnAsError": [
           "NU1605"
         ]
+      },
+      "restoreAuditProperties": {
+        "enableAudit": "true",
+        "auditLevel": "low",
+        "auditMode": "direct"
       }
     },
     "frameworks": {
@@ -507,7 +512,7 @@
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.128/PortableRuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.422/PortableRuntimeIdentifierGraph.json"
       }
     }
   }
