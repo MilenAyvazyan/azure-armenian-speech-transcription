@@ -1,7 +1,9 @@
 using AzureTranscription.Api.Services;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 
+Console.OutputEncoding = System.Text.Encoding.UTF8;
 var builder = WebApplication.CreateBuilder(args);
+
 
 // 1. Add essential framework services
 builder.Services.AddControllers();
