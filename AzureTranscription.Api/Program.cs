@@ -28,21 +28,13 @@ builder.Services.AddScoped<IFileValidationService, FileValidationService>();
 // CRITICAL KESTREL SERVER LIMIT OVERRIDE TO STOP THE EXE CRASH
 builder.Services.Configure<KestrelServerOptions>(options =>
 {
-<<<<<<< HEAD
-    options.Limits.MaxRequestBodySize = 30 * 1024 * 1024;
-=======
     options.Limits.MaxRequestBodySize = 60 * 1024 * 1024; // Server limit set to 60 MB
->>>>>>> 08051b79a11708a28447cfd9f7baf8e960b1f631
 });
 
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
 {
     options.ValueLengthLimit = int.MaxValue;
-<<<<<<< HEAD
-    options.MultipartBodyLengthLimit = 30 * 1024 * 1024;
-=======
     options.MultipartBodyLengthLimit = 60 * 1024 * 1024; // Form limit set to 60 MB
->>>>>>> 08051b79a11708a28447cfd9f7baf8e960b1f631
     options.MemoryBufferThreshold = int.MaxValue;
 });
 
