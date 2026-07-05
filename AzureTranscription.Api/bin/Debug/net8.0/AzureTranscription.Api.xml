@@ -10,7 +10,7 @@
             </summary>
             <param name="audioFile">The audio file that will be uploaded and transcribed.</param>
             <returns>
-            Returns a transcription job identifier when the request is accepted.
+            Returns the Blob URL and Azure's transcription job response when the request is accepted.
             </returns>
         </member>
         <member name="M:AzureTranscription.Api.Controllers.TranscriptionController.AzureWebhook(System.Text.Json.JsonElement)">

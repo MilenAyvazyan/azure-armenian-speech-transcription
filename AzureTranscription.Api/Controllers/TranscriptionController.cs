@@ -13,10 +13,14 @@ namespace AzureTranscription.Api.Controllers
     public class TranscriptionController : ControllerBase
     {
         private readonly IFileValidationService _fileValidationService;
+        private readonly ITranscriptionService _transcriptionService;
 
-        public TranscriptionController(IFileValidationService fileValidationService)
+        public TranscriptionController(
+            IFileValidationService fileValidationService,
+            ITranscriptionService transcriptionService)
         {
             _fileValidationService = fileValidationService;
+            _transcriptionService = transcriptionService;
         }
 
         /// <summary>
@@ -24,17 +28,18 @@ namespace AzureTranscription.Api.Controllers
         /// </summary>
         /// <param name="audioFile">The audio file that will be uploaded and transcribed.</param>
         /// <returns>
-        /// Returns a transcription job identifier when the request is accepted.
+        /// Returns the Blob URL and Azure's transcription job response when the request is accepted.
         /// </returns>
         [HttpPost("start")]
         [ProducesResponseType(StatusCodes.Status202Accepted)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        [ProducesResponseType(StatusCodes.Status502BadGateway)]
         public async Task<IActionResult> StartTranscription(IFormFile audioFile)
         {
             try
             {
-                // Step 1: Validation
+                // Step 1: Validation (Lana's part)
                 var (isValid, errorMessage) = _fileValidationService.ValidateAudioFile(audioFile);
                 if (!isValid)
                 {
@@ -59,16 +64,30 @@ namespace AzureTranscription.Api.Controllers
                     await stream.FlushAsync();
                 }
 
-                var fakeTranscriptionId = Guid.NewGuid().ToString();
-
-                return Accepted(new
+                // Step 4: Upload to Azure Blob Storage and start the batch transcription job (Sona's part)
+                try
                 {
-                    transcriptionId = fakeTranscriptionId,
-                    fileName = fileName,
-                    savedToTempDirectory = filePath,
-                    status = "Processing",
-                    message = "The file has been verified, safely written to temp storage, and transcription has begun"
-                });
+                    var blobUrl = await _transcriptionService.UploadAudioToBlobAsync(filePath);
+                    var azureResponse = await _transcriptionService.StartBatchTranscriptionAsync(blobUrl);
+
+                    return Accepted(new
+                    {
+                        fileName = fileName,
+                        blobUrl = blobUrl,
+                        azureResponse = azureResponse,
+                        status = "Processing",
+                        message = "The file was uploaded to Azure Blob Storage and transcription has started."
+                    });
+                }
+                catch (ApplicationException ex)
+                {
+                    return StatusCode(502, new
+                    {
+                        error = "Azure Speech Service-ի հետ կապի խնդիր։",
+                        details = ex.Message,
+                        status = 502
+                    });
+                }
             }
             catch (Exception ex)
             {
@@ -114,7 +133,7 @@ namespace AzureTranscription.Api.Controllers
                 if (parsedResult.Utterances != null)
                 {
                     Console.WriteLine($"Successfully parsed {parsedResult.Utterances.Count} utterances.");
-                    
+
                     foreach (var utterance in parsedResult.Utterances)
                     {
                         Console.WriteLine($"[{utterance.Speaker}]: {utterance.Text}");
