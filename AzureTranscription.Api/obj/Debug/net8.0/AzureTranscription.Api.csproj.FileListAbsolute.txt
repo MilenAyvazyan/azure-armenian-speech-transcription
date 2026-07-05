@@ -66,3 +66,5 @@ C:\Users\marti\PyCharmMiscProject\azure-armenian-speech-transcription\AzureTrans
 C:\Users\marti\PyCharmMiscProject\azure-armenian-speech-transcription\AzureTranscription.Api\obj\Debug\net8.0\ref\AzureTranscription.Api.dll
 C:\Users\marti\PyCharmMiscProject\azure-armenian-speech-transcription\AzureTranscription.Api\bin\Debug\net8.0\AzureTranscription.Api.xml
 C:\Users\marti\PyCharmMiscProject\azure-armenian-speech-transcription\AzureTranscription.Api\obj\Debug\net8.0\AzureTranscription.Api.xml
+C:\Users\HP\OneDrive\Documents\azure-armenian-speech-transcription\AzureTranscription.Api\bin\Debug\net8.0\AzureTranscription.Api.xml
+C:\Users\HP\OneDrive\Documents\azure-armenian-speech-transcription\AzureTranscription.Api\obj\Debug\net8.0\AzureTranscription.Api.xml

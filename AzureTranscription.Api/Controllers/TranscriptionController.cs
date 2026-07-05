@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using AzureTranscription.Api.Services;
+using AzureTranscription.Api.DTOs;
 
 namespace AzureTranscription.Api.Controllers
 {
@@ -100,18 +101,43 @@ namespace AzureTranscription.Api.Controllers
                     return BadRequest("Empty request from Azure");
                 }
 
-                Console.WriteLine("Azure Webhook called. Data received");
+                // 1. Ստանում ենք մաքուր JSON տեքստը Azure-ից
+                string rawJson = azureResponse.GetRawText();
+                Console.WriteLine("Azure Webhook called. Raw JSON received.");
+
+                // 2. Կանչում ենք Մարտինի գրած Parser-ը
+                var parser = new AzureTranscriptionParser();
+                TranscriptionResultDto parsedResult = parser.Parse(rawJson);
+
+                // 3. Տերմինալում տպում ենք (Debug-ի համար), որ տեսնենք՝ ճիշտ է parse եղել
+                Console.WriteLine($"Transcription Status: {parsedResult.Status}");
+                if (parsedResult.Utterances != null)
+                {
+                    Console.WriteLine($"Successfully parsed {parsedResult.Utterances.Count} utterances.");
+                    
+                    foreach (var utterance in parsedResult.Utterances)
+                    {
+                        Console.WriteLine($"[{utterance.Speaker}]: {utterance.Text}");
+                    }
+                }
+
+                // TODO: Այստեղ ապագայում parsedResult-ը կփոխանցես ձեր բազային կամ հաջորդ սերվիսին
 
                 return Ok(new
                 {
-                    message = "The data was successfully received by the backend"
+                    message = "The data was successfully received and parsed by the backend",
+                    status = parsedResult.Status,
+                    utterancesCount = parsedResult.Utterances?.Count ?? 0
                 });
             }
             catch (Exception ex)
             {
+                Console.WriteLine($"Parser Error in Webhook: {ex.Message}");
                 return StatusCode(500, new
                 {
-                    error = ex.Message
+                    error = "An error occurred while parsing the Azure transcription database payload.",
+                    details = ex.Message,
+                    status = 500
                 });
             }
         }
