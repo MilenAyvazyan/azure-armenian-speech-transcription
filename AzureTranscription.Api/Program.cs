@@ -25,6 +25,10 @@ builder.Services.AddSwaggerGen(options =>
 // 2. Add Lana's File Processing & Validation Registrations
 builder.Services.AddScoped<IFileValidationService, FileValidationService>();
 
+// 2b. Add Sona's Transcription Service (Azure Blob + Speech integration)
+builder.Services.AddScoped<ITranscriptionService, TranscriptionService>();
+builder.Services.AddHttpClient<TranscriptionService>();
+
 // CRITICAL KESTREL SERVER LIMIT OVERRIDE TO STOP THE EXE CRASH
 builder.Services.Configure<KestrelServerOptions>(options =>
 {

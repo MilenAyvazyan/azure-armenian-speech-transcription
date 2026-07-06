@@ -11,10 +11,11 @@
 using System;
 using System.Reflection;
 
+[assembly: Microsoft.Extensions.Configuration.UserSecrets.UserSecretsIdAttribute("debcc061-bc75-4024-9b27-c0d4dc7fccf8")]
 [assembly: System.Reflection.AssemblyCompanyAttribute("AzureTranscription.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f2abfdd81a2601b15ffe83ed8987b4525a78fddd")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+44047161d9885d7c3acee865c4e93010376592f7")]
 [assembly: System.Reflection.AssemblyProductAttribute("AzureTranscription.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("AzureTranscription.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

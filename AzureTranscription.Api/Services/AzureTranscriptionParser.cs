@@ -13,44 +13,42 @@ namespace AzureTranscription.Api.Services
             using JsonDocument document = JsonDocument.Parse(json);
             JsonElement root = document.RootElement;
 
-            // Read transcription status
             if (root.TryGetProperty("status", out JsonElement status))
             {
                 result.Status = status.GetString() ?? string.Empty;
             }
 
-            // Read job ID (if available)
             if (root.TryGetProperty("self", out JsonElement self))
             {
                 result.JobId = self.GetString() ?? string.Empty;
             }
 
-            // Read recognized phrases
             if (root.TryGetProperty("recognizedPhrases", out JsonElement phrases))
             {
                 foreach (JsonElement phrase in phrases.EnumerateArray())
                 {
                     var utterance = new TranscriptionUtteranceDto();
 
-                    // Speaker
                     if (phrase.TryGetProperty("speaker", out JsonElement speaker))
                     {
                         utterance.Speaker = $"Speaker {speaker.GetInt32()}";
                     }
 
-                    // Offset
+                    // ՈՒՇԱԴՐՈՒԹՅՈՒՆ. Azure-ը այս թվերը երբեմն վերադարձնում է
+                    // տասնորդական կետով (օրինակ՝ 3900000.0), ուստի GetInt64()-ի փոխարեն
+                    // կարդում ենք որպես double և հետո վերածում long-ի
                     if (phrase.TryGetProperty("offsetInTicks", out JsonElement offset))
                     {
-                        utterance.Offset = TimeSpan.FromTicks(offset.GetInt64());
+                        long offsetTicks = (long)offset.GetDouble();
+                        utterance.Offset = TimeSpan.FromTicks(offsetTicks);
                     }
 
-                    // Duration
                     if (phrase.TryGetProperty("durationInTicks", out JsonElement duration))
                     {
-                        utterance.Duration = TimeSpan.FromTicks(duration.GetInt64());
+                        long durationTicks = (long)duration.GetDouble();
+                        utterance.Duration = TimeSpan.FromTicks(durationTicks);
                     }
 
-                    // Transcribed text
                     if (phrase.TryGetProperty("nBest", out JsonElement nBest) &&
                         nBest.ValueKind == JsonValueKind.Array &&
                         nBest.GetArrayLength() > 0)
