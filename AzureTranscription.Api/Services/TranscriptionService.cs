@@ -8,6 +8,7 @@ using System;
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace AzureTranscription.Api.Services
@@ -18,6 +19,7 @@ namespace AzureTranscription.Api.Services
         private readonly string? _blobConnectionString;
         private readonly string? _blobContainerName;
         private readonly HttpClient _httpClient;
+        private readonly IConfiguration _configuration;
 
         public TranscriptionService(
             IOptions<AzureSpeechServicesOptions> speechOptions,
@@ -25,6 +27,7 @@ namespace AzureTranscription.Api.Services
             HttpClient httpClient)
         {
             _speechOptions = speechOptions.Value;
+            _configuration = configuration;
             _blobConnectionString = configuration["AzureBlobStorage:ConnectionString"];
             _blobContainerName = configuration["AzureBlobStorage:ContainerName"];
             _httpClient = httpClient;
@@ -71,22 +74,83 @@ namespace AzureTranscription.Api.Services
             request.Headers.Add("Ocp-Apim-Subscription-Key", _speechOptions.SubscriptionKey);
             request.Content = JsonContent.Create(requestBody);
 
-            try
-            {
-                var response = await _httpClient.SendAsync(request);
-                var body = await response.Content.ReadAsStringAsync();
+            var response = await _httpClient.SendAsync(request);
+            var body = await response.Content.ReadAsStringAsync();
 
-                if (!response.IsSuccessStatusCode)
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new ApplicationException($"Azure error {response.StatusCode}: {body}");
+            }
+
+            return body;
+        }
+
+        public async Task<string?> GetCompletedTranscriptionJsonAsync(string transcriptionSelfUrl)
+        {
+            // Քայլ 1. Ստուգում ենք transcription-ի ընթացիկ ստատուսը
+            using var statusRequest = new HttpRequestMessage(HttpMethod.Get, transcriptionSelfUrl);
+            statusRequest.Headers.Add("Ocp-Apim-Subscription-Key", _speechOptions.SubscriptionKey);
+
+            var statusResponse = await _httpClient.SendAsync(statusRequest);
+            var statusBody = await statusResponse.Content.ReadAsStringAsync();
+
+            if (!statusResponse.IsSuccessStatusCode)
+            {
+                throw new ApplicationException($"Azure error {statusResponse.StatusCode}: {statusBody}");
+            }
+
+            using var statusDoc = JsonDocument.Parse(statusBody);
+            string status = statusDoc.RootElement.TryGetProperty("status", out var statusEl)
+                ? statusEl.GetString() ?? ""
+                : "";
+
+            if (status != "Succeeded")
+            {
+                // Դեռ պատրաստ չէ (Running), կամ ձախողվել է (Failed)
+                return null;
+            }
+
+            // Քայլ 2. Ստանում ենք ֆայլերի ցուցակը
+            string filesUrl = statusDoc.RootElement.GetProperty("links").GetProperty("files").GetString()!;
+
+            using var filesRequest = new HttpRequestMessage(HttpMethod.Get, filesUrl);
+            filesRequest.Headers.Add("Ocp-Apim-Subscription-Key", _speechOptions.SubscriptionKey);
+
+            var filesResponse = await _httpClient.SendAsync(filesRequest);
+            var filesBody = await filesResponse.Content.ReadAsStringAsync();
+
+            if (!filesResponse.IsSuccessStatusCode)
+            {
+                throw new ApplicationException($"Azure error {filesResponse.StatusCode}: {filesBody}");
+            }
+
+            using var filesDoc = JsonDocument.Parse(filesBody);
+
+            string? contentUrl = null;
+            foreach (var file in filesDoc.RootElement.GetProperty("values").EnumerateArray())
+            {
+                if (file.TryGetProperty("kind", out var kindEl) && kindEl.GetString() == "Transcription")
                 {
-                    throw new ApplicationException($"Azure error {response.StatusCode}: {body}");
+                    contentUrl = file.GetProperty("links").GetProperty("contentUrl").GetString();
+                    break;
                 }
+            }
 
-                return body;
-            }
-            catch (TaskCanceledException)
+            if (contentUrl == null)
             {
-                throw new ApplicationException("Azure Speech Service-ը timeout տվեց։");
+                throw new ApplicationException("Transcription result ֆայլը չգտնվեց Azure-ի ֆայլերի ցուցակում։");
             }
+
+            // Քայլ 3. Ներբեռնում ենք իրական transcription-ի արդյունքը (recognizedPhrases-ով)
+            var contentResponse = await _httpClient.GetAsync(contentUrl);
+            var contentBody = await contentResponse.Content.ReadAsStringAsync();
+
+            if (!contentResponse.IsSuccessStatusCode)
+            {
+                throw new ApplicationException($"Azure error downloading result {contentResponse.StatusCode}: {contentBody}");
+            }
+
+            return contentBody;
         }
     }
 }

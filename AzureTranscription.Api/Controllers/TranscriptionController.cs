@@ -23,13 +23,6 @@ namespace AzureTranscription.Api.Controllers
             _transcriptionService = transcriptionService;
         }
 
-        /// <summary>
-        /// Starts a new Azure Speech Batch Transcription job by uploading an audio file.
-        /// </summary>
-        /// <param name="audioFile">The audio file that will be uploaded and transcribed.</param>
-        /// <returns>
-        /// Returns the Blob URL and Azure's transcription job response when the request is accepted.
-        /// </returns>
         [HttpPost("start")]
         [ProducesResponseType(StatusCodes.Status202Accepted)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -39,14 +32,12 @@ namespace AzureTranscription.Api.Controllers
         {
             try
             {
-                // Step 1: Validation (Lana's part)
                 var (isValid, errorMessage) = _fileValidationService.ValidateAudioFile(audioFile);
                 if (!isValid)
                 {
                     return BadRequest(new { error = errorMessage, status = 400 });
                 }
 
-                // Step 2: Build Safe Temp Directory
                 var fileName = $"{Guid.NewGuid()}_{Path.GetFileName(audioFile.FileName)}";
                 var uploadPath = Path.Combine(Path.GetTempPath(), "AzureTranscriptionUploads");
 
@@ -57,14 +48,12 @@ namespace AzureTranscription.Api.Controllers
 
                 var filePath = Path.Combine(uploadPath, fileName);
 
-                // Step 3: Write file safely and forcefully close the streams right away
                 using (var stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None))
                 {
                     await audioFile.CopyToAsync(stream);
                     await stream.FlushAsync();
                 }
 
-                // Step 4: Upload to Azure Blob Storage and start the batch transcription job (Sona's part)
                 try
                 {
                     var blobUrl = await _transcriptionService.UploadAudioToBlobAsync(filePath);
@@ -100,35 +89,63 @@ namespace AzureTranscription.Api.Controllers
             }
         }
 
-        /// <summary>
-        /// Receives Azure Speech Service webhook notifications after a transcription job has finished.
-        /// </summary>
-        /// <param name="azureResponse">The JSON payload sent by Azure Speech Services.</param>
-        /// <returns>
-        /// Returns a success response if the webhook payload is received and processed.
-        /// </returns>
         [HttpPost("webhook")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public IActionResult AzureWebhook([FromBody] System.Text.Json.JsonElement azureResponse)
+        public async Task<IActionResult> AzureWebhook()
         {
+            // --- Validation/challenge հարցման մշակում ---
+            if (Request.Query.ContainsKey("validationToken"))
+            {
+                string token = Request.Query["validationToken"].ToString();
+                Console.WriteLine($"Azure validation challenge received. Token: {token}");
+                return Content(token, "text/plain");
+            }
+
+            // --- Իրական completion notification-ի մշակում ---
             try
             {
-                if (azureResponse.ValueKind == System.Text.Json.JsonValueKind.Undefined)
+                using var reader = new StreamReader(Request.Body);
+                string rawJson = await reader.ReadToEndAsync();
+
+                if (string.IsNullOrWhiteSpace(rawJson))
                 {
                     return BadRequest("Empty request from Azure");
                 }
 
-                // 1. Ստանում ենք մաքուր JSON տեքստը Azure-ից
-                string rawJson = azureResponse.GetRawText();
                 Console.WriteLine("Azure Webhook called. Raw JSON received.");
+                Console.WriteLine(rawJson);
 
-                // 2. Կանչում ենք Մարտինի գրած Parser-ը
+                using var notificationDoc = System.Text.Json.JsonDocument.Parse(rawJson);
+
+                if (!notificationDoc.RootElement.TryGetProperty("self", out var selfEl))
+                {
+                    return BadRequest("Azure notification-ում 'self' դաշտը չկա։");
+                }
+
+                string transcriptionSelfUrl = selfEl.GetString() ?? "";
+
+                // Ստանում ենք իրական transcription-ի արդյունքը (կամ null, եթե դեռ պատրաստ չէ)
+                string? resultJson = await _transcriptionService.GetCompletedTranscriptionJsonAsync(transcriptionSelfUrl);
+
+                Console.WriteLine("========== RESULT JSON START ==========");
+                Console.WriteLine(resultJson);
+                Console.WriteLine("========== RESULT JSON END ==========");
+
+                if (resultJson == null)
+                {
+                    Console.WriteLine("Transcription դեռ Succeeded վիճակում չէ, կամ ձախողվել է։");
+                    return Ok(new
+                    {
+                        message = "Notification-ը ստացվեց, բայց transcription-ը դեռ Succeeded չէ։",
+                        status = "NotReady"
+                    });
+                }
+
                 var parser = new AzureTranscriptionParser();
-                TranscriptionResultDto parsedResult = parser.Parse(rawJson);
+                TranscriptionResultDto parsedResult = parser.Parse(resultJson);
 
-                // 3. Տերմինալում տպում ենք (Debug-ի համար), որ տեսնենք՝ ճիշտ է parse եղել
                 Console.WriteLine($"Transcription Status: {parsedResult.Status}");
                 if (parsedResult.Utterances != null)
                 {
@@ -139,8 +156,6 @@ namespace AzureTranscription.Api.Controllers
                         Console.WriteLine($"[{utterance.Speaker}]: {utterance.Text}");
                     }
                 }
-
-                // TODO: Այստեղ ապագայում parsedResult-ը կփոխանցես ձեր բազային կամ հաջորդ սերվիսին
 
                 return Ok(new
                 {
