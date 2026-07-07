@@ -13,6 +13,6 @@ namespace AzureTranscription.Api.Services
         /// transcription result JSON (containing recognizedPhrases).
         /// Returns null if the transcription is not yet in "Succeeded" state.
         /// </summary>
-        Task<string?> GetCompletedTranscriptionJsonAsync(string transcriptionSelfUrl);
+        Task<(string? resultJson, string status)> GetCompletedTranscriptionJsonAsync(string transcriptionSelfUrl);
     }
 }

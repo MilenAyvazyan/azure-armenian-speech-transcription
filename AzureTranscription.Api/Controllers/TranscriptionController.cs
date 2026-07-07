@@ -127,7 +127,7 @@ namespace AzureTranscription.Api.Controllers
                 string transcriptionSelfUrl = selfEl.GetString() ?? "";
 
                 // Ստանում ենք իրական transcription-ի արդյունքը (կամ null, եթե դեռ պատրաստ չէ)
-                string? resultJson = await _transcriptionService.GetCompletedTranscriptionJsonAsync(transcriptionSelfUrl);
+                var (resultJson, transcriptionStatus) = await _transcriptionService.GetCompletedTranscriptionJsonAsync(transcriptionSelfUrl);
 
                 Console.WriteLine("========== RESULT JSON START ==========");
                 Console.WriteLine(resultJson);
@@ -135,11 +135,11 @@ namespace AzureTranscription.Api.Controllers
 
                 if (resultJson == null)
                 {
-                    Console.WriteLine("Transcription դեռ Succeeded վիճակում չէ, կամ ձախողվել է։");
+                    Console.WriteLine($"Transcription դեռ Succeeded վիճակում չէ (ընթացիկ status. {transcriptionStatus})։");
                     return Ok(new
                     {
                         message = "Notification-ը ստացվեց, բայց transcription-ը դեռ Succeeded չէ։",
-                        status = "NotReady"
+                        status = transcriptionStatus
                     });
                 }
 

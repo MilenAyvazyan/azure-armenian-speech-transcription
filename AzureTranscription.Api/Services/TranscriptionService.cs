@@ -74,18 +74,26 @@ namespace AzureTranscription.Api.Services
             request.Headers.Add("Ocp-Apim-Subscription-Key", _speechOptions.SubscriptionKey);
             request.Content = JsonContent.Create(requestBody);
 
-            var response = await _httpClient.SendAsync(request);
-            var body = await response.Content.ReadAsStringAsync();
-
-            if (!response.IsSuccessStatusCode)
+            try
             {
-                throw new ApplicationException($"Azure error {response.StatusCode}: {body}");
-            }
+                var response = await _httpClient.SendAsync(request);
+                var body = await response.Content.ReadAsStringAsync();
 
-            return body;
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new ApplicationException($"Azure error {response.StatusCode}: {body}");
+                }
+
+                return body;
+            }
+            catch (TaskCanceledException)
+            {
+                // Այս սխալը լինում է, երբ Azure-ը HttpClient-ի timeout-ի ընթացքում չի պատասխանում
+                throw new ApplicationException("Azure Speech Service-ը timeout տվեց (չպատասխանեց սահմանված ժամանակում)։");
+            }
         }
 
-        public async Task<string?> GetCompletedTranscriptionJsonAsync(string transcriptionSelfUrl)
+        public async Task<(string? resultJson, string status)> GetCompletedTranscriptionJsonAsync(string transcriptionSelfUrl)
         {
             // Քայլ 1. Ստուգում ենք transcription-ի ընթացիկ ստատուսը
             using var statusRequest = new HttpRequestMessage(HttpMethod.Get, transcriptionSelfUrl);
@@ -104,10 +112,23 @@ namespace AzureTranscription.Api.Services
                 ? statusEl.GetString() ?? ""
                 : "";
 
+            if (status == "Failed")
+            {
+                // Azure-ն ինքն է ձախողվել transcription-ը մշակելիս (օրինակ՝ վատ որակի աուդիո)
+                string failureReason = "Unknown";
+                if (statusDoc.RootElement.TryGetProperty("properties", out var propsEl) &&
+                    propsEl.TryGetProperty("error", out var errorEl) &&
+                    errorEl.TryGetProperty("message", out var msgEl))
+                {
+                    failureReason = msgEl.GetString() ?? "Unknown";
+                }
+                throw new ApplicationException($"Azure transcription-ը ձախողվել է. {failureReason}");
+            }
+
             if (status != "Succeeded")
             {
-                // Դեռ պատրաստ չէ (Running), կամ ձախողվել է (Failed)
-                return null;
+                // Դեռ ընթացքի մեջ է (Running/NotStarted), ոչ սխալ, պարզապես դեռ պատրաստ չէ
+                return (null, status);
             }
 
             // Քայլ 2. Ստանում ենք ֆայլերի ցուցակը
@@ -150,7 +171,7 @@ namespace AzureTranscription.Api.Services
                 throw new ApplicationException($"Azure error downloading result {contentResponse.StatusCode}: {contentBody}");
             }
 
-            return contentBody;
+            return (contentBody, status);
         }
     }
 }
