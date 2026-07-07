@@ -62,7 +62,11 @@ namespace AzureTranscription.Api.Services
             {
                 contentUrls = new[] { audioUrl },
                 locale = "hy-AM",
-                displayName = "Armenian Transcription",
+                displayName = "Armenian Transcription via Whisper",
+                model = new
+                {
+                    self = "https://eastus.api.cognitive.microsoft.com/speechtotext/v3.2/models/base/e418c4a9-9937-4db7-b2c9-8afbff72d950"
+                },
                 properties = new
                 {
                     diarizationEnabled = true,
