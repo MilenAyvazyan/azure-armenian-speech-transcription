@@ -28,8 +28,8 @@ namespace AzureTranscription.Api.Services
         {
             _speechOptions = speechOptions.Value;
             _configuration = configuration;
-            _blobConnectionString = configuration["AzureBlobStorage:ConnectionString"];
-            _blobContainerName = configuration["AzureBlobStorage:ContainerName"];
+            _blobConnectionString = configuration["BlobStorage:ConnectionString"];
+            _blobContainerName = configuration["BlobStorage:ContainerName"];
             _httpClient = httpClient;
         }
 
