@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using AzureTranscription.Api.Services;
 using AzureTranscription.Api.DTOs;
 
@@ -14,13 +15,16 @@ namespace AzureTranscription.Api.Controllers
     {
         private readonly IFileValidationService _fileValidationService;
         private readonly ITranscriptionService _transcriptionService;
+        private readonly ILogger<TranscriptionController> _logger;
 
         public TranscriptionController(
             IFileValidationService fileValidationService,
-            ITranscriptionService transcriptionService)
+            ITranscriptionService transcriptionService,
+            ILogger<TranscriptionController> logger)
         {
             _fileValidationService = fileValidationService;
             _transcriptionService = transcriptionService;
+            _logger = logger;
         }
 
         [HttpPost("start")]
@@ -100,6 +104,7 @@ namespace AzureTranscription.Api.Controllers
             {
                 string token = Request.Query["validationToken"].ToString();
                 Console.WriteLine($"Azure validation challenge received. Token: {token}");
+                _logger.LogInformation("Azure validation challenge received. Token: {Token}", token);
                 return Content(token, "text/plain");
             }
 
@@ -116,6 +121,7 @@ namespace AzureTranscription.Api.Controllers
 
                 Console.WriteLine("Azure Webhook called. Raw JSON received.");
                 Console.WriteLine(rawJson);
+                _logger.LogInformation("Azure Webhook called. Raw JSON received: {RawJson}", rawJson);
 
                 using var notificationDoc = System.Text.Json.JsonDocument.Parse(rawJson);
 
@@ -132,10 +138,12 @@ namespace AzureTranscription.Api.Controllers
                 Console.WriteLine("========== RESULT JSON START ==========");
                 Console.WriteLine(resultJson);
                 Console.WriteLine("========== RESULT JSON END ==========");
+                _logger.LogInformation("Result JSON: {ResultJson}", resultJson);
 
                 if (resultJson == null)
                 {
                     Console.WriteLine($"Transcription դեռ Succeeded վիճակում չէ (ընթացիկ status. {transcriptionStatus})։");
+                    _logger.LogInformation("Transcription is not yet Succeeded. Current status: {Status}", transcriptionStatus);
                     return Ok(new
                     {
                         message = "Notification-ը ստացվեց, բայց transcription-ը դեռ Succeeded չէ։",
@@ -147,13 +155,17 @@ namespace AzureTranscription.Api.Controllers
                 TranscriptionResultDto parsedResult = parser.Parse(resultJson);
 
                 Console.WriteLine($"Transcription Status: {parsedResult.Status}");
+                _logger.LogInformation("Transcription Status: {Status}", parsedResult.Status);
+
                 if (parsedResult.Utterances != null)
                 {
                     Console.WriteLine($"Successfully parsed {parsedResult.Utterances.Count} utterances.");
+                    _logger.LogInformation("Successfully parsed {Count} utterances.", parsedResult.Utterances.Count);
 
                     foreach (var utterance in parsedResult.Utterances)
                     {
                         Console.WriteLine($"[{utterance.Speaker}]: {utterance.Text}");
+                        _logger.LogInformation("[{Speaker}]: {Text}", utterance.Speaker, utterance.Text);
                     }
                 }
 
@@ -167,6 +179,7 @@ namespace AzureTranscription.Api.Controllers
             catch (Exception ex)
             {
                 Console.WriteLine($"Parser Error in Webhook: {ex.Message}");
+                _logger.LogError(ex, "Parser Error in Webhook");
                 return StatusCode(500, new
                 {
                     error = "An error occurred while parsing the Azure transcription database payload.",
