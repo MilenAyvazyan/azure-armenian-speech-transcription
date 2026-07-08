@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using AzureTranscription.Api.Services;
 using AzureTranscription.Api.DTOs;
+using AzureTranscription.Api.Models;
+using Microsoft.Extensions.Logging;
 
 namespace AzureTranscription.Api.Controllers
 {
@@ -15,15 +17,18 @@ namespace AzureTranscription.Api.Controllers
     {
         private readonly IFileValidationService _fileValidationService;
         private readonly ITranscriptionService _transcriptionService;
+        private readonly IMongoService _mongoService;
         private readonly ILogger<TranscriptionController> _logger;
 
         public TranscriptionController(
             IFileValidationService fileValidationService,
             ITranscriptionService transcriptionService,
+            IMongoService mongoService,
             ILogger<TranscriptionController> logger)
         {
             _fileValidationService = fileValidationService;
             _transcriptionService = transcriptionService;
+            _mongoService = mongoService;
             _logger = logger;
         }
 
@@ -103,12 +108,10 @@ namespace AzureTranscription.Api.Controllers
             if (Request.Query.ContainsKey("validationToken"))
             {
                 string token = Request.Query["validationToken"].ToString();
-                Console.WriteLine($"Azure validation challenge received. Token: {token}");
-                _logger.LogInformation("Azure validation challenge received. Token: {Token}", token);
+                _logger.LogInformation($"Azure validation challenge received. Token: {token}");
                 return Content(token, "text/plain");
             }
 
-            // --- Իրական completion notification-ի մշակում ---
             try
             {
                 using var reader = new StreamReader(Request.Body);
@@ -118,10 +121,8 @@ namespace AzureTranscription.Api.Controllers
                 {
                     return BadRequest("Empty request from Azure");
                 }
-
-                Console.WriteLine("Azure Webhook called. Raw JSON received.");
-                Console.WriteLine(rawJson);
-                _logger.LogInformation("Azure Webhook called. Raw JSON received: {RawJson}", rawJson);
+                
+                _logger.LogInformation("Azure Webhook called. Raw JSON: {RawJson}", rawJson);
 
                 using var notificationDoc = System.Text.Json.JsonDocument.Parse(rawJson);
 
@@ -132,12 +133,8 @@ namespace AzureTranscription.Api.Controllers
 
                 string transcriptionSelfUrl = selfEl.GetString() ?? "";
 
-                // Ստանում ենք իրական transcription-ի արդյունքը (կամ null, եթե դեռ պատրաստ չէ)
                 var (resultJson, transcriptionStatus) = await _transcriptionService.GetCompletedTranscriptionJsonAsync(transcriptionSelfUrl);
 
-                Console.WriteLine("========== RESULT JSON START ==========");
-                Console.WriteLine(resultJson);
-                Console.WriteLine("========== RESULT JSON END ==========");
                 _logger.LogInformation("Result JSON: {ResultJson}", resultJson);
 
                 if (resultJson == null)
@@ -153,6 +150,17 @@ namespace AzureTranscription.Api.Controllers
 
                 var parser = new AzureTranscriptionParser();
                 TranscriptionResultDto parsedResult = parser.Parse(resultJson);
+                var historyItem = new TranscriptionHistory
+                {
+                    FileName = "Audio_" + DateTime.UtcNow.ToString("yyyyMMdd_HHmmss"),
+                    AudioUrl = transcriptionSelfUrl, 
+                    Text = parsedResult.Utterances != null 
+                        ? string.Join(" ", parsedResult.Utterances.Select(u => u.Text)) 
+                        : "No text found",
+                    CreatedAt = DateTime.UtcNow
+                };
+                await _mongoService.SaveTranscriptionAsync(historyItem);
+                _logger.LogInformation("Data successfully saved to MongoDB!");
 
                 Console.WriteLine($"Transcription Status: {parsedResult.Status}");
                 _logger.LogInformation("Transcription Status: {Status}", parsedResult.Status);
@@ -178,8 +186,7 @@ namespace AzureTranscription.Api.Controllers
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Parser Error in Webhook: {ex.Message}");
-                _logger.LogError(ex, "Parser Error in Webhook");
+                _logger.LogError(ex, "Parser Error in Webhook: {Message}", ex.Message);
                 return StatusCode(500, new
                 {
                     error = "An error occurred while parsing the Azure transcription database payload.",

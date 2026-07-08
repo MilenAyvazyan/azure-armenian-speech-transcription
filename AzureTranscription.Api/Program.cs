@@ -29,6 +29,8 @@ builder.Services.AddScoped<IFileValidationService, FileValidationService>();
 builder.Services.AddScoped<ITranscriptionService, TranscriptionService>();
 builder.Services.AddHttpClient<TranscriptionService>();
 
+builder.Services.AddSingleton<IMongoService, MongoService>();
+
 // CRITICAL KESTREL SERVER LIMIT OVERRIDE TO STOP THE EXE CRASH
 builder.Services.Configure<KestrelServerOptions>(options =>
 {
