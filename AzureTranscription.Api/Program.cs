@@ -13,7 +13,6 @@ builder.Services.Configure<AzureSpeechServicesOptions>(
 // 1. Add essential framework services
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-
 builder.Services.AddSwaggerGen(options =>
 {
     var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
@@ -28,7 +27,6 @@ builder.Services.AddScoped<IFileValidationService, FileValidationService>();
 // 2b. Add Sona's Transcription Service (Azure Blob + Speech integration)
 builder.Services.AddScoped<ITranscriptionService, TranscriptionService>();
 builder.Services.AddHttpClient<TranscriptionService>();
-
 builder.Services.AddSingleton<IMongoService, MongoService>();
 
 // CRITICAL KESTREL SERVER LIMIT OVERRIDE TO STOP THE EXE CRASH
@@ -62,12 +60,12 @@ var app = builder.Build();
 app.UseSwagger();
 app.UseSwaggerUI();
 
-app.UseHttpsRedirection();
-
+// КРИТИЧЕСКОЕ ИЗՄЕНЕНИЕ: Переносим UseCors в самый верх пайплайна, 
+// чтобы заголовки безопасности добавлялись ко ВСЕМ запросам сразу, включая редиректы!
 app.UseCors("AllowAll");
 
+app.UseHttpsRedirection();
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();
