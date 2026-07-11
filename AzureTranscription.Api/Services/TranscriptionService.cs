@@ -47,9 +47,11 @@ namespace AzureTranscription.Api.Services
                 await blobClient.UploadAsync(stream, true);
             }
 
+            // 7 օր vaidity, ոչ թե 2 ժամ, որպեսզի audio-ն continue to play after
+            // transcription-ը ավարտվի և history-ում պահվի
             var sasUri = blobClient.GenerateSasUri(
                 BlobSasPermissions.Read,
-                DateTimeOffset.UtcNow.AddHours(2));
+                DateTimeOffset.UtcNow.AddDays(7));
 
             return sasUri.ToString();
         }
@@ -70,7 +72,8 @@ namespace AzureTranscription.Api.Services
                 properties = new
                 {
                     diarizationEnabled = true,
-                    timeToLiveHours = 48
+                    timeToLiveHours = 48,
+                    webhookUrl = _configuration["AzureSpeechServices:WebhookUrl"]
                 }
             };
 
@@ -97,7 +100,7 @@ namespace AzureTranscription.Api.Services
             }
         }
 
-        public async Task<(string? resultJson, string status)> GetCompletedTranscriptionJsonAsync(string transcriptionSelfUrl)
+        public async Task<(string? resultJson, string status, string? audioUrl)> GetCompletedTranscriptionJsonAsync(string transcriptionSelfUrl)
         {
             // Քայլ 1. Ստուգում ենք transcription-ի ընթացիկ ստատուսը
             using var statusRequest = new HttpRequestMessage(HttpMethod.Get, transcriptionSelfUrl);
@@ -132,7 +135,7 @@ namespace AzureTranscription.Api.Services
             if (status != "Succeeded")
             {
                 // Դեռ ընթացքի մեջ է (Running/NotStarted), ոչ սխալ, պարզապես դեռ պատրաստ չէ
-                return (null, status);
+                return (null, status, null);
             }
 
             // Քայլ 2. Ստանում ենք ֆայլերի ցուցակը
@@ -175,7 +178,23 @@ namespace AzureTranscription.Api.Services
                 throw new ApplicationException($"Azure error downloading result {contentResponse.StatusCode}: {contentBody}");
             }
 
-            return (contentBody, status);
+            // Result ֆայլի root-ում կա "source" դաշտը, որը հենց այն SAS URL-ն է,
+            // որ մենք ուղարկել էինք Azure-ին որպես contentUrls[0] (StartBatchTranscriptionAsync)
+            string? audioUrl = null;
+            try
+            {
+                using var resultDoc = JsonDocument.Parse(contentBody);
+                if (resultDoc.RootElement.TryGetProperty("source", out var sourceEl))
+                {
+                    audioUrl = sourceEl.GetString();
+                }
+            }
+            catch (JsonException)
+            {
+                // resultJson-ը անսպասելի ձևաչափով է. AudioUrl-ը կմնա null, controller-ը կունենա fallback
+            }
+
+            return (contentBody, status, audioUrl);
         }
     }
 }

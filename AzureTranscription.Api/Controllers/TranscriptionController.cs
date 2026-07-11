@@ -68,8 +68,24 @@ namespace AzureTranscription.Api.Controllers
                     var blobUrl = await _transcriptionService.UploadAudioToBlobAsync(filePath);
                     var azureResponse = await _transcriptionService.StartBatchTranscriptionAsync(blobUrl);
 
+                    string? azureJobUrl = null;
+                    using (var doc = System.Text.Json.JsonDocument.Parse(azureResponse))
+                    {
+                        if (doc.RootElement.TryGetProperty("self", out var selfEl))
+                        {
+                            azureJobUrl = selfEl.GetString();
+                        }
+                    }
+
+                    string recordId = "";
+                    if (!string.IsNullOrEmpty(azureJobUrl))
+                    {
+                        recordId = await _mongoService.CreateProcessingRecordAsync(fileName, azureJobUrl);
+                    }
+
                     return Accepted(new
                     {
+                        id = recordId,
                         fileName = fileName,
                         blobUrl = blobUrl,
                         azureResponse = azureResponse,
@@ -92,6 +108,89 @@ namespace AzureTranscription.Api.Controllers
                 return StatusCode(500, new
                 {
                     error = "A filesystem error occurred on the server.",
+                    details = ex.Message,
+                    status = 500
+                });
+            }
+        }
+
+        [HttpGet("history")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> GetHistory()
+        {
+            try
+            {
+                var history = await _mongoService.GetAllHistoryAsync();
+                return Ok(history);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching transcription history: {Message}", ex.Message);
+                return StatusCode(500, new
+                {
+                    error = "Չհաջողվեց ստանալ պատմությունը MongoDB-ից։",
+                    details = ex.Message,
+                    status = 500
+                });
+            }
+        }
+        [HttpGet("{id}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetTranscriptionById(string id)
+        {
+            var record = await _mongoService.GetByIdAsync(id);
+            if (record == null)
+            {
+                return NotFound(new { error = "Transcript not found.", status = 404 });
+            }
+            return Ok(record);
+        }
+
+        [HttpDelete("{id}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> DeleteTranscription(string id)
+        {
+            try
+            {
+                var deleted = await _mongoService.DeleteByIdAsync(id);
+                if (!deleted)
+                {
+                    return NotFound(new { error = "Transcript not found.", status = 404 });
+                }
+                return Ok(new { message = "Transcript deleted.", id });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting transcription {Id}: {Message}", id, ex.Message);
+                return StatusCode(500, new
+                {
+                    error = "Failed to delete transcript from the database.",
+                    details = ex.Message,
+                    status = 500
+                });
+            }
+        }
+
+        [HttpDelete]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> ClearHistory()
+        {
+            try
+            {
+                var deletedCount = await _mongoService.DeleteAllAsync();
+                return Ok(new { message = "History cleared.", deletedCount });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error clearing transcription history: {Message}", ex.Message);
+                return StatusCode(500, new
+                {
+                    error = "Failed to clear history from the database.",
                     details = ex.Message,
                     status = 500
                 });
@@ -121,7 +220,7 @@ namespace AzureTranscription.Api.Controllers
                 {
                     return BadRequest("Empty request from Azure");
                 }
-                
+
                 _logger.LogInformation("Azure Webhook called. Raw JSON: {RawJson}", rawJson);
 
                 using var notificationDoc = System.Text.Json.JsonDocument.Parse(rawJson);
@@ -133,7 +232,7 @@ namespace AzureTranscription.Api.Controllers
 
                 string transcriptionSelfUrl = selfEl.GetString() ?? "";
 
-                var (resultJson, transcriptionStatus) = await _transcriptionService.GetCompletedTranscriptionJsonAsync(transcriptionSelfUrl);
+                var (resultJson, transcriptionStatus, audioUrl) = await _transcriptionService.GetCompletedTranscriptionJsonAsync(transcriptionSelfUrl);
 
                 _logger.LogInformation("Result JSON: {ResultJson}", resultJson);
 
@@ -150,17 +249,13 @@ namespace AzureTranscription.Api.Controllers
 
                 var parser = new AzureTranscriptionParser();
                 TranscriptionResultDto parsedResult = parser.Parse(resultJson);
-                var historyItem = new TranscriptionHistory
-                {
-                    FileName = "Audio_" + DateTime.UtcNow.ToString("yyyyMMdd_HHmmss"),
-                    AudioUrl = transcriptionSelfUrl, 
-                    Text = parsedResult.Utterances != null 
-                        ? string.Join(" ", parsedResult.Utterances.Select(u => u.Text)) 
-                        : "No text found",
-                    CreatedAt = DateTime.UtcNow
-                };
-                await _mongoService.SaveTranscriptionAsync(historyItem);
-                _logger.LogInformation("Data successfully saved to MongoDB!");
+
+                string transcriptText = parsedResult.Utterances != null
+                    ? string.Join(" ", parsedResult.Utterances.Select(u => u.Text))
+                    : "No text found";
+
+                await _mongoService.UpdateResultByAzureJobUrlAsync(transcriptionSelfUrl, transcriptText, parsedResult.Status ?? "Succeeded");
+                _logger.LogInformation("Transcription record updated in MongoDB (id linked via AzureJobUrl)!");
 
                 Console.WriteLine($"Transcription Status: {parsedResult.Status}");
                 _logger.LogInformation("Transcription Status: {Status}", parsedResult.Status);
@@ -190,7 +285,7 @@ namespace AzureTranscription.Api.Controllers
                 return StatusCode(500, new
                 {
                     error = "An error occurred while parsing the Azure transcription database payload.",
-                    details = ex.Message,
+                    details = ex.Message, 
                     status = 500
                 });
             }

@@ -14,5 +14,7 @@ namespace AzureTranscription.Api.Models
         public string AudioUrl { get; set; } = null!;
         public string Text { get; set; } = null!;
         public DateTime CreatedAt { get; set; }
+        public string? AzureJobUrl { get; set; }
+        public string Status { get; set; } = "Processing";
     }
 }
