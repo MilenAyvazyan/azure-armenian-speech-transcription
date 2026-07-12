@@ -14,7 +14,7 @@ namespace AzureTranscription.Api.Services
         Task<bool> DeleteByIdAsync(string id);
         Task<long> DeleteAllAsync();
         Task<string> CreateProcessingRecordAsync(string fileName, string azureJobUrl);
-        Task UpdateResultByAzureJobUrlAsync(string azureJobUrl, string text, string status, string? audioUrl = null);
+        Task UpdateResultByAzureJobUrlAsync(string azureJobUrl, string text, string status, string? audioUrl = null, List<UtteranceRecord>? utterances = null);
         Task<TranscriptionHistory?> GetByIdAsync(string id);
     }
 
@@ -60,18 +60,20 @@ namespace AzureTranscription.Api.Services
                 AzureJobUrl = azureJobUrl,
                 Text = "",
                 Status = "Processing",
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                Utterances = new List<UtteranceRecord>()
             };
             await _collection.InsertOneAsync(record);
             return record.Id!;
         }
 
-        public async Task UpdateResultByAzureJobUrlAsync(string azureJobUrl, string text, string status, string? audioUrl = null)
+        public async Task UpdateResultByAzureJobUrlAsync(string azureJobUrl, string text, string status, string? audioUrl = null, List<UtteranceRecord>? utterances = null)
         {
             var filter = Builders<TranscriptionHistory>.Filter.Eq(h => h.AzureJobUrl, azureJobUrl);
             var updateDef = Builders<TranscriptionHistory>.Update
                 .Set(h => h.Text, text)
-                .Set(h => h.Status, status);
+                .Set(h => h.Status, status)
+                .Set(h => h.Utterances, utterances ?? new List<UtteranceRecord>());
 
             if (!string.IsNullOrEmpty(audioUrl))
             {

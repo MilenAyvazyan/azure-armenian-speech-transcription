@@ -72,6 +72,14 @@ namespace AzureTranscription.Api.Services
                 properties = new
                 {
                     diarizationEnabled = true,
+                    diarization = new
+                    {
+                        speakers = new
+                        {
+                            minCount = 1,
+                            maxCount = 2
+                        }
+                    },
                     timeToLiveHours = 48
                 }
             };

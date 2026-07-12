@@ -1,6 +1,7 @@
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 using System;
+using System.Collections.Generic;
 
 namespace AzureTranscription.Api.Models
 {
@@ -16,5 +17,13 @@ namespace AzureTranscription.Api.Models
         public DateTime CreatedAt { get; set; }
         public string? AzureJobUrl { get; set; }
         public string Status { get; set; } = "Processing";
+
+        public List<UtteranceRecord> Utterances { get; set; } = new();
+    }
+
+    public class UtteranceRecord
+    {
+        public string Speaker { get; set; } = "";
+        public string Text { get; set; } = "";
     }
 }

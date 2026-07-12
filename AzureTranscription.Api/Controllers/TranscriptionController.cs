@@ -7,7 +7,8 @@ using Microsoft.Extensions.Logging;
 using AzureTranscription.Api.Services;
 using AzureTranscription.Api.DTOs;
 using AzureTranscription.Api.Models;
-using Microsoft.Extensions.Logging;
+using System.Linq;
+using System.Collections.Generic;
 
 namespace AzureTranscription.Api.Controllers
 {
@@ -251,11 +252,15 @@ namespace AzureTranscription.Api.Controllers
                 TranscriptionResultDto parsedResult = parser.Parse(resultJson);
 
                 string transcriptText = parsedResult.Utterances != null
-                    ? string.Join(" ", parsedResult.Utterances.Select(u => u.Text))
-                    : "No text found";
+    ? string.Join(" ", parsedResult.Utterances.Select(u => u.Text))
+    : "No text found";
+
+                var utteranceRecords = parsedResult.Utterances?
+                    .Select(u => new UtteranceRecord { Speaker = u.Speaker, Text = u.Text })
+                    .ToList() ?? new List<UtteranceRecord>();
 
                 string finalStatus = string.IsNullOrEmpty(parsedResult.Status) ? "Succeeded" : parsedResult.Status;
-                await _mongoService.UpdateResultByAzureJobUrlAsync(transcriptionSelfUrl, transcriptText, finalStatus, audioUrl);
+                await _mongoService.UpdateResultByAzureJobUrlAsync(transcriptionSelfUrl, transcriptText, finalStatus, audioUrl, utteranceRecords);
                 _logger.LogInformation("Transcription record updated in MongoDB (id linked via AzureJobUrl)!");
 
                 Console.WriteLine($"Transcription Status: {parsedResult.Status}");
