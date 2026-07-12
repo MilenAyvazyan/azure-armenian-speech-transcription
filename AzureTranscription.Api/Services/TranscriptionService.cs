@@ -94,14 +94,12 @@ namespace AzureTranscription.Api.Services
             }
             catch (TaskCanceledException)
             {
-                // Այս սխալը լինում է, երբ Azure-ը HttpClient-ի timeout-ի ընթացքում չի պատասխանում
                 throw new ApplicationException("Azure Speech Service-ը timeout տվեց (չպատասխանեց սահմանված ժամանակում)։");
             }
         }
 
         public async Task<(string? resultJson, string status, string? audioUrl)> GetCompletedTranscriptionJsonAsync(string transcriptionSelfUrl)
         {
-            // Քայլ 1. Ստուգում ենք transcription-ի ընթացիկ ստատուսը
             using var statusRequest = new HttpRequestMessage(HttpMethod.Get, transcriptionSelfUrl);
             statusRequest.Headers.Add("Ocp-Apim-Subscription-Key", _speechOptions.SubscriptionKey);
 
@@ -120,7 +118,6 @@ namespace AzureTranscription.Api.Services
 
             if (status == "Failed")
             {
-                // Azure-ն ինքն է ձախողվել transcription-ը մշակելիս (օրինակ՝ վատ որակի աուդիո)
                 string failureReason = "Unknown";
                 if (statusDoc.RootElement.TryGetProperty("properties", out var propsEl) &&
                     propsEl.TryGetProperty("error", out var errorEl) &&
@@ -133,11 +130,9 @@ namespace AzureTranscription.Api.Services
 
             if (status != "Succeeded")
             {
-                // Դեռ ընթացքի մեջ է (Running/NotStarted), ոչ սխալ, պարզապես դեռ պատրաստ չէ
                 return (null, status, null);
             }
 
-            // Քայլ 2. Ստանում ենք ֆայլերի ցուցակը
             string filesUrl = statusDoc.RootElement.GetProperty("links").GetProperty("files").GetString()!;
 
             using var filesRequest = new HttpRequestMessage(HttpMethod.Get, filesUrl);
@@ -168,7 +163,6 @@ namespace AzureTranscription.Api.Services
                 throw new ApplicationException("Transcription result ֆայլը չգտնվեց Azure-ի ֆայլերի ցուցակում։");
             }
 
-            // Քայլ 3. Ներբեռնում ենք իրական transcription-ի արդյունքը (recognizedPhrases-ով)
             var contentResponse = await _httpClient.GetAsync(contentUrl);
             var contentBody = await contentResponse.Content.ReadAsStringAsync();
 
@@ -177,8 +171,6 @@ namespace AzureTranscription.Api.Services
                 throw new ApplicationException($"Azure error downloading result {contentResponse.StatusCode}: {contentBody}");
             }
 
-            // Result ֆայլի root-ում կա "source" դաշտը, որը հենց այն SAS URL-ն է,
-            // որ մենք ուղարկել էինք Azure-ին որպես contentUrls[0] (StartBatchTranscriptionAsync)
             string? audioUrl = null;
             try
             {
@@ -190,7 +182,6 @@ namespace AzureTranscription.Api.Services
             }
             catch (JsonException)
             {
-                // resultJson-ը անսպասելի ձևաչափով է. AudioUrl-ը կմնա null, controller-ը կունենա fallback
             }
 
             return (contentBody, status, audioUrl);
