@@ -255,7 +255,7 @@ namespace AzureTranscription.Api.Controllers
                     : "No text found";
 
                 string finalStatus = string.IsNullOrEmpty(parsedResult.Status) ? "Succeeded" : parsedResult.Status;
-                await _mongoService.UpdateResultByAzureJobUrlAsync(transcriptionSelfUrl, transcriptText, finalStatus);
+                await _mongoService.UpdateResultByAzureJobUrlAsync(transcriptionSelfUrl, transcriptText, finalStatus, audioUrl);
                 _logger.LogInformation("Transcription record updated in MongoDB (id linked via AzureJobUrl)!");
 
                 Console.WriteLine($"Transcription Status: {parsedResult.Status}");

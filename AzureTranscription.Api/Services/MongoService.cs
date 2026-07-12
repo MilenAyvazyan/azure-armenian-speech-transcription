@@ -14,7 +14,7 @@ namespace AzureTranscription.Api.Services
         Task<bool> DeleteByIdAsync(string id);
         Task<long> DeleteAllAsync();
         Task<string> CreateProcessingRecordAsync(string fileName, string azureJobUrl);
-        Task UpdateResultByAzureJobUrlAsync(string azureJobUrl, string text, string status);
+        Task UpdateResultByAzureJobUrlAsync(string azureJobUrl, string text, string status, string? audioUrl = null);
         Task<TranscriptionHistory?> GetByIdAsync(string id);
     }
 
@@ -66,13 +66,19 @@ namespace AzureTranscription.Api.Services
             return record.Id!;
         }
 
-        public async Task UpdateResultByAzureJobUrlAsync(string azureJobUrl, string text, string status)
+        public async Task UpdateResultByAzureJobUrlAsync(string azureJobUrl, string text, string status, string? audioUrl = null)
         {
             var filter = Builders<TranscriptionHistory>.Filter.Eq(h => h.AzureJobUrl, azureJobUrl);
-            var update = Builders<TranscriptionHistory>.Update
+            var updateDef = Builders<TranscriptionHistory>.Update
                 .Set(h => h.Text, text)
                 .Set(h => h.Status, status);
-            await _collection.UpdateOneAsync(filter, update);
+
+            if (!string.IsNullOrEmpty(audioUrl))
+            {
+                updateDef = updateDef.Set(h => h.AudioUrl, audioUrl);
+            }
+
+            await _collection.UpdateOneAsync(filter, updateDef);
         }
 
         public async Task<TranscriptionHistory?> GetByIdAsync(string id)
