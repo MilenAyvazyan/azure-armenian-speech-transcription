@@ -19,17 +19,20 @@ namespace AzureTranscription.Api.Controllers
         private readonly IFileValidationService _fileValidationService;
         private readonly ITranscriptionService _transcriptionService;
         private readonly IMongoService _mongoService;
+        private readonly ITranscriptionCorrectionService _correctionService;
         private readonly ILogger<TranscriptionController> _logger;
 
         public TranscriptionController(
             IFileValidationService fileValidationService,
             ITranscriptionService transcriptionService,
             IMongoService mongoService,
+            ITranscriptionCorrectionService correctionService,
             ILogger<TranscriptionController> logger)
         {
             _fileValidationService = fileValidationService;
             _transcriptionService = transcriptionService;
             _mongoService = mongoService;
+            _correctionService = correctionService;
             _logger = logger;
         }
 
@@ -250,6 +253,15 @@ namespace AzureTranscription.Api.Controllers
 
                 var parser = new AzureTranscriptionParser();
                 TranscriptionResultDto parsedResult = parser.Parse(resultJson);
+
+                // --- Post-processing correction (find-replace known misrecognitions) ---
+                if (parsedResult.Utterances != null)
+                {
+                    foreach (var utterance in parsedResult.Utterances)
+                    {
+                        utterance.Text = _correctionService.ApplyCorrections(utterance.Text);
+                    }
+                }
 
                 string transcriptText = parsedResult.Utterances != null
     ? string.Join(" ", parsedResult.Utterances.Select(u => u.Text))

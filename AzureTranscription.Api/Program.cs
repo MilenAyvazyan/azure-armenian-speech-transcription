@@ -13,6 +13,7 @@ builder.Services.Configure<AzureSpeechServicesOptions>(
 // 1. Add essential framework services
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddScoped<ITranscriptionCorrectionService, TranscriptionCorrectionService>();
 
 builder.Services.AddSwaggerGen(options =>
 {
