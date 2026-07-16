@@ -56,7 +56,11 @@ namespace AzureTranscription.Api.Services
             return sasUri.ToString();
         }
 
-        public async Task<string> StartBatchTranscriptionAsync(string audioUrl)
+        // modelSelfUrl: the full "self" URL of the model to use (Whisper base
+        // model OR your Custom Speech model — caller decides which).
+        // displayName: shown in Azure's own transcription job listing, useful
+        // for telling jobs apart when debugging in Speech Studio.
+        public async Task<string> StartBatchTranscriptionAsync(string audioUrl, string modelSelfUrl, string displayName)
         {
             var url = $"{_speechOptions.Endpoint}/speechtotext/v3.2/transcriptions";
 
@@ -64,10 +68,10 @@ namespace AzureTranscription.Api.Services
             {
                 contentUrls = new[] { audioUrl },
                 locale = "hy-AM",
-                displayName = "Armenian Transcription via Whisper",
+                displayName = displayName,
                 model = new
                 {
-                    self = "https://eastus.api.cognitive.microsoft.com/speechtotext/v3.2/models/base/e418c4a9-9937-4db7-b2c9-8afbff72d950"
+                    self = modelSelfUrl
                 },
                 properties = new
                 {

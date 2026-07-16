@@ -4,14 +4,21 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using AzureTranscription.Api.Services;
 using AzureTranscription.Api.DTOs;
 using AzureTranscription.Api.Models;
+using AzureTranscription.Api.Configuration;
 using System.Linq;
 using System.Collections.Generic;
 
 namespace AzureTranscription.Api.Controllers
 {
+    public class TestCorrectionRequest
+    {
+        public string? Text { get; set; }
+    }
+
     [ApiController]
     [Route("api/[controller]")]
     public class TranscriptionController : ControllerBase
@@ -20,6 +27,7 @@ namespace AzureTranscription.Api.Controllers
         private readonly ITranscriptionService _transcriptionService;
         private readonly IMongoService _mongoService;
         private readonly ITranscriptionCorrectionService _correctionService;
+        private readonly AzureSpeechServicesOptions _speechOptions;
         private readonly ILogger<TranscriptionController> _logger;
 
         public TranscriptionController(
@@ -27,12 +35,14 @@ namespace AzureTranscription.Api.Controllers
             ITranscriptionService transcriptionService,
             IMongoService mongoService,
             ITranscriptionCorrectionService correctionService,
+            IOptions<AzureSpeechServicesOptions> speechOptions,
             ILogger<TranscriptionController> logger)
         {
             _fileValidationService = fileValidationService;
             _transcriptionService = transcriptionService;
             _mongoService = mongoService;
             _correctionService = correctionService;
+            _speechOptions = speechOptions.Value;
             _logger = logger;
         }
 
@@ -69,32 +79,79 @@ namespace AzureTranscription.Api.Controllers
 
                 try
                 {
+                    // One blob upload — reused by both parallel transcription jobs.
                     var blobUrl = await _transcriptionService.UploadAudioToBlobAsync(filePath);
-                    var azureResponse = await _transcriptionService.StartBatchTranscriptionAsync(blobUrl);
 
-                    string? azureJobUrl = null;
-                    using (var doc = System.Text.Json.JsonDocument.Parse(azureResponse))
+                    string groupId = Guid.NewGuid().ToString();
+
+                    var modelsToRun = new[]
                     {
-                        if (doc.RootElement.TryGetProperty("self", out var selfEl))
+                        new
                         {
-                            azureJobUrl = selfEl.GetString();
+                            Label = "Whisper",
+                            SelfUrl = _speechOptions.WhisperModelSelfUrl,
+                            DisplayName = "Armenian Transcription via Whisper"
+                        },
+                        new
+                        {
+                            Label = "CustomSpeech",
+                            SelfUrl = _speechOptions.CustomSpeechModelSelfUrl,
+                            DisplayName = "Armenian Transcription via Custom Speech"
                         }
+                    };
+
+                    var results = new List<object>();
+
+                    foreach (var m in modelsToRun)
+                    {
+                        if (string.IsNullOrWhiteSpace(m.SelfUrl))
+                        {
+                            _logger.LogWarning("Skipping model {Model} — no self URL configured.", m.Label);
+                            continue;
+                        }
+
+                        var azureResponse = await _transcriptionService.StartBatchTranscriptionAsync(blobUrl, m.SelfUrl, m.DisplayName);
+
+                        string? azureJobUrl = null;
+                        using (var doc = System.Text.Json.JsonDocument.Parse(azureResponse))
+                        {
+                            if (doc.RootElement.TryGetProperty("self", out var selfEl))
+                            {
+                                azureJobUrl = selfEl.GetString();
+                            }
+                        }
+
+                        string recordId = "";
+                        if (!string.IsNullOrEmpty(azureJobUrl))
+                        {
+                            recordId = await _mongoService.CreateProcessingRecordAsync(fileName, azureJobUrl, m.Label, groupId);
+                        }
+
+                        results.Add(new
+                        {
+                            model = m.Label,
+                            recordId = recordId,
+                            azureJobUrl = azureJobUrl
+                        });
                     }
 
-                    string recordId = "";
-                    if (!string.IsNullOrEmpty(azureJobUrl))
+                    if (results.Count == 0)
                     {
-                        recordId = await _mongoService.CreateProcessingRecordAsync(fileName, azureJobUrl);
+                        return StatusCode(500, new
+                        {
+                            error = "Ոչ մի model configured/started չէր (ստուգեք WhisperModelSelfUrl / CustomSpeechModelSelfUrl config-ը)։",
+                            status = 500
+                        });
                     }
 
                     return Accepted(new
                     {
-                        id = recordId,
+                        groupId = groupId,
                         fileName = fileName,
                         blobUrl = blobUrl,
-                        azureResponse = azureResponse,
+                        results = results,
                         status = "Processing",
-                        message = "The file was uploaded to Azure Blob Storage and transcription has started."
+                        message = "The file was uploaded and transcription has started with both models."
                     });
                 }
                 catch (ApplicationException ex)
@@ -112,6 +169,92 @@ namespace AzureTranscription.Api.Controllers
                 return StatusCode(500, new
                 {
                     error = "A filesystem error occurred on the server.",
+                    details = ex.Message,
+                    status = 500
+                });
+            }
+        }
+
+        [HttpPost("test-correction")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public IActionResult TestCorrection([FromBody] TestCorrectionRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request?.Text))
+            {
+                return BadRequest(new { error = "Text field is required.", status = 400 });
+            }
+
+            string corrected = _correctionService.ApplyCorrections(request.Text);
+
+            return Ok(new
+            {
+                original = request.Text,
+                corrected = corrected,
+                changed = !string.Equals(request.Text, corrected, StringComparison.Ordinal)
+            });
+        }
+
+        [HttpPost("reprocess-corrections")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> ReprocessCorrections()
+        {
+            try
+            {
+                var history = await _mongoService.GetAllHistoryAsync();
+                int updatedCount = 0;
+                int skippedCount = 0;
+
+                foreach (var record in history)
+                {
+                    if (string.IsNullOrEmpty(record.AzureJobUrl))
+                    {
+                        // Can't target an update without the key UpdateResultByAzureJobUrlAsync
+                        // filters on — skip these rather than guess.
+                        skippedCount++;
+                        continue;
+                    }
+
+                    string correctedText = _correctionService.ApplyCorrections(record.Text ?? "");
+
+                    var correctedUtterances = record.Utterances?
+                        .Select(u => new UtteranceRecord
+                        {
+                            Speaker = u.Speaker,
+                            Text = _correctionService.ApplyCorrections(u.Text)
+                        })
+                        .ToList() ?? new List<UtteranceRecord>();
+
+                    bool textChanged = !string.Equals(record.Text, correctedText, StringComparison.Ordinal);
+
+                    await _mongoService.UpdateResultByAzureJobUrlAsync(
+                        record.AzureJobUrl,
+                        correctedText,
+                        record.Status,
+                        record.AudioUrl,
+                        correctedUtterances);
+
+                    if (textChanged)
+                    {
+                        updatedCount++;
+                    }
+                }
+
+                return Ok(new
+                {
+                    message = "Reprocessing complete.",
+                    totalRecords = history.Count,
+                    recordsWithChanges = updatedCount,
+                    recordsSkipped = skippedCount
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error reprocessing corrections: {Message}", ex.Message);
+                return StatusCode(500, new
+                {
+                    error = "Failed to reprocess existing history with corrections.",
                     details = ex.Message,
                     status = 500
                 });
@@ -139,6 +282,19 @@ namespace AzureTranscription.Api.Controllers
                 });
             }
         }
+        [HttpGet("group/{groupId}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> GetTranscriptionsByGroup(string groupId)
+        {
+            var records = await _mongoService.GetByGroupIdAsync(groupId);
+            if (records == null || records.Count == 0)
+            {
+                return NotFound(new { error = "No records found for this group.", status = 404 });
+            }
+            return Ok(records);
+        }
+
         [HttpGet("{id}")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]

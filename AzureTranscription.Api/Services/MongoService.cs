@@ -13,9 +13,10 @@ namespace AzureTranscription.Api.Services
         Task<List<TranscriptionHistory>> GetAllHistoryAsync();
         Task<bool> DeleteByIdAsync(string id);
         Task<long> DeleteAllAsync();
-        Task<string> CreateProcessingRecordAsync(string fileName, string azureJobUrl);
+        Task<string> CreateProcessingRecordAsync(string fileName, string azureJobUrl, string modelUsed, string groupId);
         Task UpdateResultByAzureJobUrlAsync(string azureJobUrl, string text, string status, string? audioUrl = null, List<UtteranceRecord>? utterances = null);
         Task<TranscriptionHistory?> GetByIdAsync(string id);
+        Task<List<TranscriptionHistory>> GetByGroupIdAsync(string groupId);
     }
 
     public class MongoService : IMongoService
@@ -51,7 +52,7 @@ namespace AzureTranscription.Api.Services
             return result.DeletedCount;
         }
 
-        public async Task<string> CreateProcessingRecordAsync(string fileName, string azureJobUrl)
+        public async Task<string> CreateProcessingRecordAsync(string fileName, string azureJobUrl, string modelUsed, string groupId)
         {
             var record = new TranscriptionHistory
             {
@@ -60,6 +61,8 @@ namespace AzureTranscription.Api.Services
                 AzureJobUrl = azureJobUrl,
                 Text = "",
                 Status = "Processing",
+                ModelUsed = modelUsed,
+                GroupId = groupId,
                 CreatedAt = DateTime.UtcNow,
                 Utterances = new List<UtteranceRecord>()
             };
@@ -86,6 +89,11 @@ namespace AzureTranscription.Api.Services
         public async Task<TranscriptionHistory?> GetByIdAsync(string id)
         {
             return await _collection.Find(h => h.Id == id).FirstOrDefaultAsync();
+        }
+
+        public async Task<List<TranscriptionHistory>> GetByGroupIdAsync(string groupId)
+        {
+            return await _collection.Find(h => h.GroupId == groupId).ToListAsync();
         }
     }
 }

@@ -18,6 +18,13 @@ namespace AzureTranscription.Api.Models
         public string? AzureJobUrl { get; set; }
         public string Status { get; set; } = "Processing";
 
+        // "Whisper" or "CustomSpeech" — tells the frontend which model produced this record.
+        public string? ModelUsed { get; set; }
+
+        // Shared across the two records created from the same audio upload,
+        // so the frontend can group and display them side by side.
+        public string? GroupId { get; set; }
+
         public List<UtteranceRecord> Utterances { get; set; } = new();
     }
 
